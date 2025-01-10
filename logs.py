@@ -1,6 +1,7 @@
 import logging
 import logging.handlers
 from datetime import datetime
+import os
 import sys
 import threading
 import traceback
@@ -16,7 +17,7 @@ def init_logs():
     # Setup logger
     current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_filename = f"ll-hls-log_{current_time}.log"
-
+    log_directory = "logs/"
     # logging.basicConfig(filename=log_filename,
     #                 filemode='a',
     #                 format='%(asctime)s.%(msecs)03d,%(levelname)s,%(message)s',
@@ -26,7 +27,8 @@ def init_logs():
     l = logging.getLogger("ll-hls")
     l.setLevel(logging.INFO)
     l.handlers.clear()    
-    h = logging.FileHandler(log_filename, "a")
+    os.makedirs(log_directory, exist_ok=True)
+    h = logging.FileHandler(log_directory + log_filename, "a")
     h.setLevel(logging.INFO)
     h.setFormatter(logging.Formatter(fmt='%(asctime)s.%(msecs)03d,%(levelname)s,%(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
     l.addHandler(h)

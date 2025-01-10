@@ -265,15 +265,17 @@ def display_status_of_download(type: m3u8.TypeDownload, segmentnum: int, partnum
             if manifest is None:
                 return SummaryStatus.ERROR
 
-            # Detect part to be downloaded and download it
-            max_parts_in_segment = int(manifest.EXT_X_Target_Duration // round(manifest.EXT_X_PartInf_Part_Target, 1))
-            
             lastpart: m3u8.MediaPart = None
             if len(manifest.Media_Parts) > 0:
                 lastpart = manifest.Media_Parts[len(manifest.Media_Parts)-1]
+                
+            # Detect part to be downloaded and to download it
+            max_parts_in_segment = 0
+            if manifest.EXT_X_PartInf_Part_Target > 0:
+                max_parts_in_segment = int(manifest.EXT_X_Target_Duration // round(manifest.EXT_X_PartInf_Part_Target, 1))
             
             if not lastpart:
-                status = f'ERROR No parts'
+                status = f'No Parts'
                 status_color = display.Colors.RED 
                 summary_status = SummaryStatus.ERROR
             elif (partnum >= max_parts_in_segment):
@@ -284,12 +286,18 @@ def display_status_of_download(type: m3u8.TypeDownload, segmentnum: int, partnum
                 status = f'STALE {lastpart.Segment}-{lastpart.PartNum}'
                 status_color = display.Colors.MAGENTA
                 summary_status = SummaryStatus.STALE
-            elif metrics.Response_time > manifest.EXT_X_PartInf_Part_Target * 1000:  #Response_time in ms, but PartTarget in sec
-                status = "DELAY"
+            
+            if ((manifest.EXT_X_PartInf_Part_Target > 0 and metrics.Response_time > manifest.EXT_X_PartInf_Part_Target * 1000)
+                    or (metrics.Response_time > 500)):  #Response_time in ms, but PartTarget in sec
+                status = status + " DELAY" if len(status)>0 else "DELAY"
+                response_time_color = display.Colors.CYAN
+                #summary_status = SummaryStatus.DELAY
+            if (manifest.EXT_X_Target_Duration > 0 and metrics.Response_time > manifest.EXT_X_Target_Duration * 1000):  #Response_time in ms, but TargetDuration in sec
+                status = status + " DELAY" if len(status)>0 else "DELAY"
                 response_time_color = display.Colors.YELLOW
                 summary_status = SummaryStatus.DELAY
-            
-            if (lastpart.Segment > segmentnum) or (lastpart.Segment == segmentnum and lastpart.PartNum > partnum):
+
+            if lastpart is not None and ((lastpart.Segment > segmentnum) or (lastpart.Segment == segmentnum and lastpart.PartNum > partnum)):
                 status += f' {lastpart.Segment}-{lastpart.PartNum}'
                 if status_color == display.Colors.WHITE:
                     status_color = display.Colors.CYAN
@@ -384,6 +392,8 @@ def run_tasks_for_media_manifest_1(media_manifest: m3u8.M3U8, media_index: int, 
     path_to_save_files: str = None
     #path_to_save_files = "/Users/apih/Temp/1/" # must ends with /
 
+    timer_start_ms: float = time.time()
+
     try:
         #ThreadPoolExecutorStackTraced
         #with concurrent.futures.ThreadPoolExecutor(thread_name_prefix=f"Media{media_index}PartDownload") as media_executor:        
@@ -396,6 +406,7 @@ def run_tasks_for_media_manifest_1(media_manifest: m3u8.M3U8, media_index: int, 
                     break   
                 
                 task_id += 1
+                timer_start_ms = time.time()
                 
                 filepath: str = None
 
@@ -452,7 +463,9 @@ def run_tasks_for_media_manifest_1(media_manifest: m3u8.M3U8, media_index: int, 
                     num_of_errors_in_a_raw = 0
 
                 # Detect part to be downloaded and download it
-                max_parts_in_segment = int(playlist0.EXT_X_Target_Duration // round(playlist0.EXT_X_PartInf_Part_Target, 1))
+                max_parts_in_segment = 0
+                if playlist0.EXT_X_PartInf_Part_Target > 0:
+                    max_parts_in_segment = int(playlist0.EXT_X_Target_Duration // round(playlist0.EXT_X_PartInf_Part_Target, 1))
                 if len(playlist0.Media_Parts) > 0:
                     last_part = playlist0.Media_Parts[len(playlist0.Media_Parts) - 1]
 
@@ -528,8 +541,19 @@ def run_tasks_for_media_manifest_1(media_manifest: m3u8.M3U8, media_index: int, 
 
                 else:
                     # no parts at all in new manifest, then it's a problem
+                    
                     # notify user on the screen        
-                    display.display_error(f"Manifest {playlist0.URI} does not contain parts at all! Last knows part was: {current_part[0]}/{current_part[1]} ")    
+                    #display.display_error(f"Manifest {playlist0.URI} does not contain parts at all! Last knows part was: {current_part[0]}/{current_part[1]} ")                        
+                    #pass
+
+                    # Sleep for at least 1 second or EXT_X_Target_Duration
+                    if playlist0.EXT_X_Target_Duration > 0:
+                        exec_time_s = time.time() - timer_start_ms
+                        time_to_sleep = float(playlist0.EXT_X_Target_Duration) - exec_time_s
+                        if time_to_sleep > 0:
+                            time.sleep(time_to_sleep)
+                    else:
+                        time.sleep(1) 
                             
         _safe_add_summarymanifests_to_list(media_index, summary_response_manifests, summary_stat_manifests, summary_manifest_part_duration)
         

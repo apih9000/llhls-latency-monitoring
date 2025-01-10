@@ -136,7 +136,8 @@ def _safe_print_curses_internal(text: str, item_to_add: tuple, media_index: int,
     y = y + 1
     _stdscr.move(y, 0)
 
-    text = f"{_line_counter:03d} {text}"
+    segmentnum, partnum, filetype = item_to_add
+    text = f"{_line_counter:03d} {segmentnum:04d}-{partnum:02d} {datetime.datetime.now(datetime.UTC).strftime('%H:%M:%S.%f')[:-3]} {text}"
     _line_counter += 1
 
     tw_max = min(width-x-1, _first_column_width)
@@ -230,11 +231,13 @@ def _safe_print_curses_update_status_internal(item_to_find: tuple, text: str, st
                 if len(text2) > 0:
                     text1 = _stdscr.instr(y, 0, _first_column_width).decode().strip()
 
-                    # Split the text at the first occurrence of space because of Number in it
-                    parts = text1.split(' ', 1)
+                    ## Split the text at the first occurrence of space because of Number in it
+                    #parts = text1.split(' ', 1)
+                    # Split the text at the third occurrence of space because of Number in it
+                    parts = text1.split(' ', 3)
                     # Use part after the first space if it exists, otherwise return an empty string
-                    if len(parts) > 1:
-                        text1 = parts[1]
+                    if len(parts) > 3:
+                        text1 = parts[3]
 
                     _safe_print_curses_internal(text1, item_to_find, media_index, force_new_line_if_not_empty = True)
                     # call itself again to print info on the new line, 
@@ -474,16 +477,23 @@ def display_downloadstarted(type: m3u8.TypeDownload, segmentnum: int, partnum: i
         parsed_url = urlparse(url_to_download)                            
         query = "?" + parsed_url.query if parsed_url.query else ""    
         filename = os.path.basename(parsed_url.path)
+        #fileextension = filename.rsplit('.', maxsplit=1)[1]
+        #filename = f"{fileextension} part={partnum}"
+        fileextension = filename[-15:]
 
         if type == m3u8.TypeDownload.FILE_PART:
-            #fileextension = filename.rsplit('.', maxsplit=1)[1]
-            #filename = f"{fileextension} part={partnum}"
-            fileextension = filename[-15:]
-            filename = f"{fileextension} part={partnum}"
+            if segmentnum > 0:
+                filename = f"{fileextension} part={partnum}"
+            else:
+                filename = fileextension
         elif type == m3u8.TypeDownload.MANIFEST_MEDIA:
-            filename = f"media_N.m3u8 part={partnum}"
+            #filename += f"media_N.m3u8 part={partnum}"
+            if segmentnum > 0:
+                filename = f"{fileextension} part={partnum}"
+            else:
+                filename = fileextension
 
-        text = f"{segmentnum:04d}-{partnum:02d} {datetime.datetime.now(datetime.UTC).strftime('%H:%M:%S.%f')[:-3]} {format_string_15(filename)}"
+        text = f"{format_string_15(filename)}"
 
         #text = f"Dload: {segmentnum}-{partnum} {filename + query}"
         #last_line = 
